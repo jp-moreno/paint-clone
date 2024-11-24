@@ -12,15 +12,15 @@ struct Color {
     r: u8,
     g: u8,
     b: u8,
-    a: Option<u8>,
+    a: Option<f64>,
 }
 
 
 impl Color {
     fn to_rgb_str(self) -> String{
         match self.a {
-            Some(alpha) => format!("rgb({} {} {} / %{})", self.r, self.g, self.b, alpha),
-            None => format!("rgb({} {} {})", self.r, self.g, self.b)
+            Some(alpha) => format!("rgba({}, {}, {}, {})", self.r, self.g, self.b, alpha),
+            None => format!("rgb({}, {}, {})", self.r, self.g, self.b)
         }
     }
 
@@ -41,10 +41,13 @@ impl Color {
         let b = u8::from_str_radix(&hex[4..6], 16)
             .map_err(|_| "Invalid blue component")?;
 
-        let mut a = None;
+        let mut alpha = None;
         if hex.len() == 8 {
-            a = u8::from_str_radix(&hex[6..8], 16).ok();
+            alpha = u8::from_str_radix(&hex[6..8], 16).ok();
         } 
+
+        let a = alpha.map(|x| f64::from(x) /255.0);
+
         
         Ok(Color { r, g, b, a})
     }
@@ -52,9 +55,9 @@ impl Color {
 
 
 trait DrawingTool {
-    fn draw(&mut self, context: &CanvasRenderingContext2d, event: &MouseEvent);
-    fn start_draw(&mut self, context: &CanvasRenderingContext2d, event: &MouseEvent);
-    fn end_draw(&mut self, context: &CanvasRenderingContext2d, event: &MouseEvent);
+    fn draw(&mut self, canvas_context: &CanvasRenderingContext2d, tooltip_canvas: &CanvasRenderingContext2d, event: &MouseEvent);
+    fn start_draw(&mut self, canvas_context: &CanvasRenderingContext2d, tooltip_canvas: &CanvasRenderingContext2d, event: &MouseEvent);
+    fn end_draw(&mut self, canvas_context: &CanvasRenderingContext2d, tooltip_canvas: &CanvasRenderingContext2d, event: &MouseEvent);
     fn change_primary_color(&mut self, color: Color);
     fn change_secondary_color (&mut self, color: Color);
 }
@@ -67,19 +70,19 @@ struct BrushTool {
 
 
 impl DrawingTool for BrushTool {
-    fn draw(&mut self, context: &CanvasRenderingContext2d, event: &MouseEvent) {
-        draw_at_position(context, event.offset_x() as f64, event.offset_y() as f64, self.color);
+    fn draw(&mut self, canvas_context: &CanvasRenderingContext2d, _tooltip_canvas: &CanvasRenderingContext2d, event: &MouseEvent){
+        draw_at_position(canvas_context, event.offset_x() as f64, event.offset_y() as f64, self.color);
     }
 
-    fn start_draw(&mut self, context: &CanvasRenderingContext2d, event: &MouseEvent) {
-        self.draw(context, event);
+    fn start_draw(&mut self, canvas_context: &CanvasRenderingContext2d, tooltip_canvas: &CanvasRenderingContext2d, event: &MouseEvent) {
+        self.draw(canvas_context, tooltip_canvas, event);
     }
 
     fn change_primary_color(&mut self, color: Color) {
         self.color = color;
     }
 
-    fn end_draw(&mut self, _context: &CanvasRenderingContext2d, event: &MouseEvent) {}
+    fn end_draw(&mut self, _canvas_context: &CanvasRenderingContext2d, _tooltip_canvas: &CanvasRenderingContext2d, _event: &MouseEvent) {}
     fn change_secondary_color (&mut self, _color: Color) {}
 }
 
@@ -87,25 +90,33 @@ struct RectTool {
     x: f64,
     y: f64,
     color: Color,
+    tooltip_color: Color,
 }
 
-impl DrawingTool for RectTool {
-    fn draw(&mut self, context: &CanvasRenderingContext2d, event: &MouseEvent) {}
 
-    fn start_draw(&mut self, context: &CanvasRenderingContext2d, event: &MouseEvent) {
+impl DrawingTool for RectTool {
+    fn draw(&mut self, _canvas_context: &CanvasRenderingContext2d, tooltip_canvas: &CanvasRenderingContext2d, event: &MouseEvent){
+        clear_canvas(tooltip_canvas, 500.0, 500.0);
+        draw_rect(tooltip_canvas, self.x, self.y, event.offset_x() as f64, event.offset_y() as f64, self.tooltip_color);
+    }
+
+    fn start_draw(&mut self, _canvas_context: &CanvasRenderingContext2d, _tooltip_canvas: &CanvasRenderingContext2d, event: &MouseEvent) {
         self.x = event.offset_x() as f64;
         self.y = event.offset_y() as f64;
     }
+
+    fn end_draw(&mut self, canvas_context: &CanvasRenderingContext2d, tooltip_canvas: &CanvasRenderingContext2d, event: &MouseEvent) {
+
+        clear_canvas(tooltip_canvas, 500.0, 500.0);
+        draw_rect(canvas_context, self.x, self.y, event.offset_x() as f64, event.offset_y() as f64, self.color);
+    }
+
 
     fn change_primary_color(&mut self, color: Color) {
         self.color = color;
     }
 
-    fn end_draw(&mut self, context: &CanvasRenderingContext2d, event: &MouseEvent) {
-        draw_rect(context, self.x, self.y, event.offset_x() as f64, event.offset_y() as f64, self.color);
-    }
-
-    fn change_secondary_color (&mut self, color: Color) {}
+    fn change_secondary_color (&mut self, _color: Color) {}
 }
 
 
@@ -115,6 +126,7 @@ pub struct CanvasState {
     mouse_pressed: bool,
     primary_color: Color,
     secondary_color: Color,
+    tooltip_color: Color,
 }
 
 impl CanvasState {
@@ -127,6 +139,7 @@ impl CanvasState {
             mouse_pressed: false,
             primary_color: Color{r: 0, g: 0, b: 255, a: None},
             secondary_color: Color{r: 255, g: 255, b: 255, a: None},
+            tooltip_color: Color{r: 200, g: 0, b: 255, a: Some(0.5)},
         }
     }
 }
@@ -170,7 +183,7 @@ impl Component for CanvasComponent {
 
     fn update(&mut self, _ctx: &Context<Self>, msg: Self::Message) -> bool {
         if let Some(canvas) = self.canvas_ref.cast::<HtmlCanvasElement>() {
-            let context = canvas
+            let canvas_context = canvas
                 .get_context("2d")
                 .unwrap()
                 .unwrap()
@@ -188,16 +201,16 @@ impl Component for CanvasComponent {
                 match msg {
                     Msg::MouseDown(event) => {
                         self.state.mouse_pressed = true;
-                        self.state.current_tool.start_draw(&context, &event);
+                        self.state.current_tool.start_draw(&canvas_context, &tool_context, &event);
                         return true;
                     }
                     Msg::MouseMove(event) if self.state.mouse_pressed => {
-                        self.state.current_tool.draw(&context, &event);
+                        self.state.current_tool.draw(&canvas_context, &tool_context, &event);
                         return true;
                     }
                     Msg::MouseUp(event) => {
                         self.state.mouse_pressed = false;
-                        self.state.current_tool.end_draw(&context, &event);
+                        self.state.current_tool.end_draw(&canvas_context, &tool_context, &event);
                         return true;
                     }
                     Msg::ChangeTool(tool) => {
@@ -212,7 +225,7 @@ impl Component for CanvasComponent {
                     }
                     Msg::ClearCanvas => {
                         let color = Color {r: 255, g: 255, b: 255, a: None};
-                        draw_rect(&context, 0.0, 0.0, self.width as f64, self.height as f64, color);
+                        draw_rect(&canvas_context, 0.0, 0.0, self.width as f64, self.height as f64, color);
                         return true;
                     }
                     Msg::ChangeColor(event) => {
@@ -223,7 +236,7 @@ impl Component for CanvasComponent {
                         }
                     }
                     Msg::SelectRectTool => {
-                        self.state.current_tool = Box::new(RectTool{ x: 0.0, y:0.0, color: self.state.primary_color});
+                        self.state.current_tool = Box::new(RectTool{ x: 0.0, y:0.0, color: self.state.primary_color, tooltip_color:self.state.tooltip_color});
                     }
                     Msg::SelectBrushTool => {
                         self.state.current_tool = Box::new(BrushTool{size:0.0, color: self.state.primary_color});
@@ -264,6 +277,14 @@ impl Component for CanvasComponent {
                     draw_rect(&context, 0.0, 0.0, self.width as f64, self.height as f64, color);
             }
         }
+
+        if let Some(canvas) = self.tool_canvas_ref.cast::<HtmlCanvasElement>() {
+            if _first_render {
+                canvas.set_width(self.width);
+                canvas.set_height(self.height);
+            }
+        }
+
     }
 
     fn view(&self, ctx: &Context<Self>) -> Html {
@@ -280,14 +301,14 @@ impl Component for CanvasComponent {
             <div>
                 <canvas 
                     ref={self.tool_canvas_ref.clone()}
-                    style="border:1px solid orange;"
+                    style="border:1px solid transparent; position: absolute; top: 0; left: 0; z-index: 2; pointer-events: none;"
                 />
                 <canvas
                     ref={self.canvas_ref.clone()}
+                    style="border:1px solid black; position: absolute; top: 0; left: 0; z-index: 1;"
                     {onmousedown}
                     {onmouseup}
                     {onmousemove}
-                    style="border:1px solid black;"
                 />
                 <div id="toolbar">
                     <button onclick={select_brushtool}>{"Brush Tool"}</button>
@@ -315,3 +336,6 @@ fn draw_rect(context: &CanvasRenderingContext2d, x1: f64, y1: f64, x2: f64, y2: 
     context.fill_rect(x1, y1, x2-x1, y2-y1);
 }
 
+fn clear_canvas(context: &CanvasRenderingContext2d, canvas_width: f64, canvas_height: f64){
+    context.clear_rect(0.0, 0.0, canvas_width, canvas_height);
+}
