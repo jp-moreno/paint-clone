@@ -1,6 +1,3 @@
-use std::option;
-use std::sync::Arc;
-
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
 use web_sys::{console, ClipboardItem, CanvasRenderingContext2d, HtmlCanvasElement, HtmlInputElement, MouseEvent};
