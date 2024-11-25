@@ -8,10 +8,14 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
+  WORKING_DIRECTORY: webapp
 
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ${{ env.WORKING_DIRECTORY}}
     
     # Add environment detection
     steps:
@@ -44,9 +48,9 @@ jobs:
       uses: actions/cache@v3
       with:
         path: |
-          ~/.cargo/registry
-          ~/.cargo/git
-          target
+          ~/webapp/.cargo/registry
+          ~/webapp/.cargo/git
+          webapp/target
         key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
 
     - name: Build
