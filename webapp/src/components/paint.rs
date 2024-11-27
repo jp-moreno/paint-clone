@@ -1,6 +1,7 @@
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
-use web_sys::{console, ClipboardItem, CanvasRenderingContext2d, HtmlCanvasElement, HtmlInputElement, MouseEvent};
+use web_sys::HtmlElement;
+use web_sys::{console, window, ClipboardItem, CanvasRenderingContext2d, HtmlCanvasElement, HtmlInputElement, MouseEvent};
 use yew::prelude::*;
 
 
@@ -178,7 +179,7 @@ impl Component for CanvasComponent {
     }
 
 
-    fn update(&mut self, _ctx: &Context<Self>, msg: Self::Message) -> bool {
+    fn update(&mut self, ctx: &Context<Self>, msg: Self::Message) -> bool {
         if let Some(canvas) = self.canvas_ref.cast::<HtmlCanvasElement>() {
             let canvas_context = canvas
                 .get_context("2d")
@@ -215,8 +216,18 @@ impl Component for CanvasComponent {
                         return true;
                     }
                     Msg::SaveImage => {
-                        let _ = canvas.to_data_url().map(|url| {
-                            console::log_1(&format!("Image saved: {}", url).into());
+                        let _ = canvas.to_data_url().map(|data_url| {
+                            let link = window().unwrap().document().unwrap().create_element("a").unwrap();
+                            link.set_attribute("href", &data_url).unwrap();
+                            link.set_attribute("download", "scribblai.png").unwrap(); // Sets the download attribute
+                            link.set_attribute("style", "display: none").unwrap(); // Hide the link element
+
+                            let body = window().unwrap().document().unwrap().body().unwrap();
+                            body.append_child(&link).unwrap();
+                            if let Ok(html_element) = link.dyn_into::<HtmlElement>() { 
+                                html_element.click();
+                                body.remove_child(&html_element).unwrap(); // Clean up
+                            }
                         });
                         return true;
                     }
@@ -227,7 +238,7 @@ impl Component for CanvasComponent {
                     }
                     Msg::ChangeColor(event) => {
                         if let Some(input) = event.target_dyn_into::<HtmlInputElement>() {
-                            let color = Color::from_hex_str(&input.value()).ok().expect("ERROR CONVERTING COLOR");
+                            let color = Color::from_hex_str(&input.value()).expect("ERROR CONVERTING COLOR");
                             self.state.primary_color = color;
                             self.state.current_tool.change_primary_color(color);
                         }
