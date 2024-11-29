@@ -8,14 +8,13 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
-  WORKING_DIRECTORY: ./webapp
 
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: ${{ env.WORKING_DIRECTORY }}
+        working-directory: ./webapp
     
     # Add environment detection
     steps:
