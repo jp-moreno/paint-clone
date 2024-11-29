@@ -15,7 +15,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: ${{ env.WORKING_DIRECTORY}}
+        working-directory: ${{ env.WORKING_DIRECTORY }}
     
     # Add environment detection
     steps:
