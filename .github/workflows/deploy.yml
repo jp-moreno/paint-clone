@@ -24,7 +24,13 @@ jobs:
           echo "environment=test" >> $GITHUB_OUTPUT
           echo "bucket=${{ secrets.TEST_S3_BUCKET }}" >> $GITHUB_OUTPUT
         fi
-    
+
+    - name: Install Rust
+      uses: actions-rs/toolchain@v1
+      with:
+        toolchain: stable
+        override: true
+        target: wasm32-unknown-unknown
     # Install wasm-pack for WebAssembly builds
     - name: Install wasm-pack
       run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
