@@ -20,9 +20,11 @@ jobs:
         if [[ ${{ github.ref }} == 'refs/heads/prod' ]]; then
           echo "environment=prod" >> $GITHUB_OUTPUT
           echo "bucket=${{ secrets.PROD_S3_BUCKET }}" >> $GITHUB_OUTPUT
+          echo "distribution=${{ secrets.PROD_CF_DISTRIBUTION }}" >> $GITHUB_OUTPUT
         else
           echo "environment=test" >> $GITHUB_OUTPUT
           echo "bucket=${{ secrets.TEST_S3_BUCKET }}" >> $GITHUB_OUTPUT
+          echo "distribution=${{ secrets.TEST_CF_DISTRIBUTION }}" >> $GITHUB_OUTPUT
         fi
 
     - name: Install Rust
@@ -59,3 +61,9 @@ jobs:
       run: |
         echo "Deploying to ${{ steps.env.outputs.environment }} environment..."
         aws s3 sync dist/ s3://${{ steps.env.outputs.bucket }} --delete
+
+    - name: Invalidate CloudFront Distribution
+      run: |
+        aws cloudfront create-invalidation \
+          --distribution-id ${{ steps.env.outputs.distribution }} \
+          --paths "/*"
