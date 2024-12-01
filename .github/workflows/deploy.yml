@@ -14,10 +14,15 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: ./webapp
+        working-directory: webapp
     
     # Add environment detection
     steps:
+    - name : debug working dir
+      run: |
+        pwd
+        ls -la
+
     - name: Set environment
       id: env
       run: |
