@@ -1,28 +1,18 @@
 name: Deploy Rust Yew App
-
 on:
   push:
     branches: 
       - test
       - prod
-
 env:
   CARGO_TERM_COLOR: always
-
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: webapp
     
-    # Add environment detection
     steps:
-    - name : debug working dir
-      run: |
-        pwd
-        ls -la
-
+    - uses: actions/checkout@v3
+    
     - name: Set environment
       id: env
       run: |
@@ -33,9 +23,7 @@ jobs:
           echo "environment=test" >> $GITHUB_OUTPUT
           echo "bucket=${{ secrets.TEST_S3_BUCKET }}" >> $GITHUB_OUTPUT
         fi
-
-    - uses: actions/checkout@v3
-
+    
     - name: Install Rust
       uses: actions-rs/toolchain@v1
       with:
@@ -45,20 +33,13 @@ jobs:
     
     - name: Install trunk
       run: |
+        cd /home/runner/work/paint-clone/webapp
         cargo install trunk
         cargo install wasm-bindgen-cli
-
-    - name: Cache dependencies
-      uses: actions/cache@v3
-      with:
-        path: |
-          ~/webapp/.cargo/registry
-          ~/webapp/.cargo/git
-          webapp/target
-        key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-
+    
     - name: Build
       run: |
+        cd /home/runner/work/paint-clone/webapp
         trunk build --release
         
     - name: Configure AWS Credentials
@@ -66,9 +47,10 @@ jobs:
       with:
         aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
         aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-        aws-region: us-east-1  # Change to your desired region
-
+        aws-region: us-east-1
+    
     - name: Upload to S3
       run: |
+        cd /home/runner/work/paint-clone/webapp
         echo "Deploying to ${{ steps.env.outputs.environment }} environment..."
         aws s3 sync dist/ s3://${{ steps.env.outputs.bucket }} --delete
