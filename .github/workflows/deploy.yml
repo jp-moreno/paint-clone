@@ -6,6 +6,7 @@ on:
       - prod
 env:
   CARGO_TERM_COLOR: always
+
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
@@ -24,22 +25,20 @@ jobs:
           echo "bucket=${{ secrets.TEST_S3_BUCKET }}" >> $GITHUB_OUTPUT
         fi
     
-    - name: Install Rust
-      uses: actions-rs/toolchain@v1
-      with:
-        toolchain: stable
-        target: wasm32-unknown-unknown
-        override: true
+    # Install wasm-pack for WebAssembly builds
+    - name: Install wasm-pack
+      run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
     
+    # Install trunk for Yew project building
     - name: Install trunk
       run: |
-        cd /home/runner/work/paint-clone/webapp
-        cargo install trunk
-        cargo install wasm-bindgen-cli
+        wget -qO- https://github.com/thedodd/trunk/releases/download/v0.16.0/trunk-x86_64-unknown-linux-gnu.tar.gz | tar -xzf-
+        sudo mv trunk /usr/local/bin/
     
-    - name: Build
+    # Build the Yew project
+    - name: Build Yew Project
+      working-directory: ./webapp
       run: |
-        cd /home/runner/work/paint-clone/webapp
         trunk build --release
         
     - name: Configure AWS Credentials
@@ -50,7 +49,7 @@ jobs:
         aws-region: us-east-1
     
     - name: Upload to S3
+      working-directory: ./webapp
       run: |
-        cd /home/runner/work/paint-clone/webapp
         echo "Deploying to ${{ steps.env.outputs.environment }} environment..."
         aws s3 sync dist/ s3://${{ steps.env.outputs.bucket }} --delete
