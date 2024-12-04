@@ -4,6 +4,40 @@ use web_sys::HtmlElement;
 use web_sys::{console, window, ClipboardItem, CanvasRenderingContext2d, HtmlCanvasElement, HtmlInputElement, MouseEvent};
 use yew::prelude::*;
 
+trait AbstractShape {
+    fn draw(&self, canvas: &CanvasRenderingContext2d);
+}
+
+struct Rect {
+    x1: f64,
+    y1: f64,
+    x2: f64,
+    y2: f64,
+    color: Color,
+}
+
+
+impl AbstractShape for Rect{
+    fn draw(&self, canvas_context: &CanvasRenderingContext2d) {
+        draw_rect(canvas_context, self.x1, self.y1, self.x2, self.y2, self.color);
+    }
+}
+
+
+struct Circle {
+    x: f64,
+    y: f64,
+    r: f64,
+    color: Color,
+}
+
+impl AbstractShape for Circle{
+    fn draw(&self, canvas_context: &CanvasRenderingContext2d) {
+        draw_at_position(canvas_context, self.x, self.y, self.color);
+    }
+}
+
+
 
 #[derive(Debug, Clone, Copy)]
 struct Color {
@@ -53,9 +87,9 @@ impl Color {
 
 
 trait DrawingTool {
-    fn draw(&mut self, canvas_context: &CanvasRenderingContext2d, tooltip_canvas: &CanvasRenderingContext2d, event: &MouseEvent);
-    fn start_draw(&mut self, canvas_context: &CanvasRenderingContext2d, tooltip_canvas: &CanvasRenderingContext2d, event: &MouseEvent);
-    fn end_draw(&mut self, canvas_context: &CanvasRenderingContext2d, tooltip_canvas: &CanvasRenderingContext2d, event: &MouseEvent);
+    fn draw(&mut self, canvas_context: &CanvasRenderingContext2d, tooltip_canvas: &CanvasRenderingContext2d, drawn_objects: &mut Vec<Box<dyn AbstractShape>>, event: &MouseEvent);
+    fn start_draw(&mut self, canvas_context: &CanvasRenderingContext2d, tooltip_canvas: &CanvasRenderingContext2d, drawn_objects: &mut Vec<Box<dyn AbstractShape>>, event: &MouseEvent);
+    fn end_draw(&mut self, canvas_context: &CanvasRenderingContext2d, tooltip_canvas: &CanvasRenderingContext2d, drawn_objects: &mut Vec<Box<dyn AbstractShape>>, event: &MouseEvent);
     fn change_primary_color(&mut self, color: Color);
     fn change_secondary_color (&mut self, color: Color);
 }
@@ -68,19 +102,20 @@ struct BrushTool {
 
 
 impl DrawingTool for BrushTool {
-    fn draw(&mut self, canvas_context: &CanvasRenderingContext2d, _tooltip_canvas: &CanvasRenderingContext2d, event: &MouseEvent){
-        draw_at_position(canvas_context, event.offset_x() as f64, event.offset_y() as f64, self.color);
+    fn draw(&mut self, canvas_context: &CanvasRenderingContext2d, _tooltip_canvas: &CanvasRenderingContext2d, drawn_objects: &mut Vec<Box<dyn AbstractShape>>, event: &MouseEvent){
+        let circle = Circle {x: event.offset_x() as f64, y: event.offset_y() as f64, r: self.size, color: self.color};
+        drawn_objects.push(Box::new(circle));
     }
 
-    fn start_draw(&mut self, canvas_context: &CanvasRenderingContext2d, tooltip_canvas: &CanvasRenderingContext2d, event: &MouseEvent) {
-        self.draw(canvas_context, tooltip_canvas, event);
+    fn start_draw(&mut self, canvas_context: &CanvasRenderingContext2d, tooltip_canvas: &CanvasRenderingContext2d, drawn_objects: &mut Vec<Box<dyn AbstractShape>>, event: &MouseEvent) {
+        self.draw(canvas_context, tooltip_canvas, drawn_objects, event);
     }
 
     fn change_primary_color(&mut self, color: Color) {
         self.color = color;
     }
 
-    fn end_draw(&mut self, _canvas_context: &CanvasRenderingContext2d, _tooltip_canvas: &CanvasRenderingContext2d, _event: &MouseEvent) {}
+    fn end_draw(&mut self, _canvas_context: &CanvasRenderingContext2d, _tooltip_canvas: &CanvasRenderingContext2d, _drawn_objects: &mut Vec<Box<dyn AbstractShape>>, _event: &MouseEvent) {}
     fn change_secondary_color (&mut self, _color: Color) {}
 }
 
@@ -93,20 +128,22 @@ struct RectTool {
 
 
 impl DrawingTool for RectTool {
-    fn draw(&mut self, _canvas_context: &CanvasRenderingContext2d, tooltip_canvas: &CanvasRenderingContext2d, event: &MouseEvent){
+    fn draw(&mut self, canvas_context: &CanvasRenderingContext2d, tooltip_canvas: &CanvasRenderingContext2d, drawn_objects: &mut Vec<Box<dyn AbstractShape>>, event: &MouseEvent){
         clear_canvas(tooltip_canvas, 500.0, 500.0);
         draw_rect(tooltip_canvas, self.x, self.y, event.offset_x() as f64, event.offset_y() as f64, self.tooltip_color);
     }
 
-    fn start_draw(&mut self, _canvas_context: &CanvasRenderingContext2d, _tooltip_canvas: &CanvasRenderingContext2d, event: &MouseEvent) {
+    fn start_draw(&mut self, canvas_context: &CanvasRenderingContext2d, tooltip_canvas: &CanvasRenderingContext2d, drawn_objects: &mut Vec<Box<dyn AbstractShape>>, event: &MouseEvent) {
         self.x = event.offset_x() as f64;
         self.y = event.offset_y() as f64;
     }
 
-    fn end_draw(&mut self, canvas_context: &CanvasRenderingContext2d, tooltip_canvas: &CanvasRenderingContext2d, event: &MouseEvent) {
+    fn end_draw(&mut self, canvas_context: &CanvasRenderingContext2d, tooltip_canvas: &CanvasRenderingContext2d, drawn_objects: &mut Vec<Box<dyn AbstractShape>>, event: &MouseEvent) {
 
         clear_canvas(tooltip_canvas, 500.0, 500.0);
-        draw_rect(canvas_context, self.x, self.y, event.offset_x() as f64, event.offset_y() as f64, self.color);
+        let rect = Rect {x1: self.x, y1: self.y, x2: event.offset_x() as f64, y2: event.offset_y() as f64, color: self.color};
+        drawn_objects.push(Box::new(rect));
+
     }
 
 
@@ -125,6 +162,8 @@ pub struct CanvasState {
     primary_color: Color,
     secondary_color: Color,
     tooltip_color: Color,
+    drawn_objects: Vec<Box<dyn AbstractShape>>,
+    undo_stack: Vec<Box<dyn AbstractShape>>,
 }
 
 impl CanvasState {
@@ -138,6 +177,8 @@ impl CanvasState {
             primary_color: Color{r: 0, g: 0, b: 255, a: None},
             secondary_color: Color{r: 255, g: 255, b: 255, a: None},
             tooltip_color: Color{r: 200, g: 0, b: 255, a: Some(0.5)},
+            drawn_objects: vec![],
+            undo_stack: vec![],
         }
     }
 }
@@ -162,6 +203,8 @@ pub enum Msg {
     ChangeColor(Event),
     SelectRectTool,
     SelectBrushTool,
+    Undo,
+    Redo,
 }
 
 impl Component for CanvasComponent {
@@ -199,21 +242,17 @@ impl Component for CanvasComponent {
                 match msg {
                     Msg::MouseDown(event) => {
                         self.state.mouse_pressed = true;
-                        self.state.current_tool.start_draw(&canvas_context, &tool_context, &event);
-                        return true;
+                        self.state.current_tool.start_draw(&canvas_context, &tool_context, &mut self.state.drawn_objects, &event);
                     }
                     Msg::MouseMove(event) if self.state.mouse_pressed => {
-                        self.state.current_tool.draw(&canvas_context, &tool_context, &event);
-                        return true;
+                        self.state.current_tool.draw(&canvas_context, &tool_context, &mut self.state.drawn_objects, &event);
                     }
                     Msg::MouseUp(event) => {
                         self.state.mouse_pressed = false;
-                        self.state.current_tool.end_draw(&canvas_context, &tool_context, &event);
-                        return true;
+                        self.state.current_tool.end_draw(&canvas_context, &tool_context, &mut self.state.drawn_objects, &event);
                     }
                     Msg::ChangeTool(tool) => {
                         self.state.current_tool = tool;
-                        return true;
                     }
                     Msg::SaveImage => {
                         let _ = canvas.to_data_url().map(|data_url| {
@@ -229,12 +268,10 @@ impl Component for CanvasComponent {
                                 body.remove_child(&html_element).unwrap(); // Clean up
                             }
                         });
-                        return true;
                     }
                     Msg::ClearCanvas => {
                         let color = Color {r: 255, g: 255, b: 255, a: None};
                         draw_rect(&canvas_context, 0.0, 0.0, self.width as f64, self.height as f64, color);
-                        return true;
                     }
                     Msg::ChangeColor(event) => {
                         if let Some(input) = event.target_dyn_into::<HtmlInputElement>() {
@@ -242,18 +279,39 @@ impl Component for CanvasComponent {
                             self.state.primary_color = color;
                             self.state.current_tool.change_primary_color(color);
                         }
+                        return false;
                     }
                     Msg::SelectRectTool => {
                         self.state.current_tool = Box::new(RectTool{ x: 0.0, y:0.0, color: self.state.primary_color, tooltip_color:self.state.tooltip_color});
+                        return false
                     }
                     Msg::SelectBrushTool => {
                         self.state.current_tool = Box::new(BrushTool{size:0.0, color: self.state.primary_color});
+                        return false;
+                    }
+                    Msg::Undo => {
+                        if let Some(obj) = self.state.drawn_objects.pop() {
+                            self.state.undo_stack.push(obj);
+                        }
+                    }
+                    Msg::Redo => {
+                        if let Some(obj) = self.state.undo_stack.pop() {
+                            self.state.drawn_objects.push(obj);
+                        }
                     }
                     _ => {
                         console::log_1(&"not implemented".into());
                         return false;
                     }
                 }
+
+
+                let color = Color {r: 255, g: 255, b: 255, a: None};
+                draw_rect(&canvas_context, 0.0, 0.0, self.width as f64, self.height as f64, color);
+                for shape in &self.state.drawn_objects {
+                    shape.draw(&canvas_context);
+                }
+                return true;
 
             } else {
                 console::log_1(&"Tool canvas reference not ready".into());
@@ -304,6 +362,8 @@ impl Component for CanvasComponent {
         let changecolor = ctx.link().callback(Msg::ChangeColor);
         let select_brushtool = ctx.link().callback(|_| Msg::SelectBrushTool);
         let select_recttool = ctx.link().callback(|_| Msg::SelectRectTool);
+        let undo = ctx.link().callback(|_| Msg::Undo);
+        let redo = ctx.link().callback(|_| Msg::Redo);
 
         html! {
             <div>
@@ -323,6 +383,8 @@ impl Component for CanvasComponent {
                     <button onclick={select_recttool}>{"Rect Tool"}</button>
                     <button onclick={onclear}>{"Clear"}</button>
                     <button onclick={onsaveimage}>{"Save"}</button>
+                    <button onclick={undo}>{"Undo"}</button>
+                    <button onclick={redo}>{"Redo"}</button>
                     <input type="color" onchange={changecolor} />
                 </div>
             </div>
