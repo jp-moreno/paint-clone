@@ -270,8 +270,9 @@ impl Component for CanvasComponent {
                         });
                     }
                     Msg::ClearCanvas => {
-                        let color = Color {r: 255, g: 255, b: 255, a: None};
-                        draw_rect(&canvas_context, 0.0, 0.0, self.width as f64, self.height as f64, color);
+                        self.state.drawn_objects.clear();
+                        self.state.undo_stack.clear();
+
                     }
                     Msg::ChangeColor(event) => {
                         if let Some(input) = event.target_dyn_into::<HtmlInputElement>() {
